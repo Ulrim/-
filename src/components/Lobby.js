@@ -3,6 +3,17 @@ import { observer } from 'mobx-react';
 import { dummyRooms } from '../core/data';
 import { addJournal, listJournalsByUser, saveUserProfile } from '../core/mockDb';
 
+const chartStyle = { width: 240, height: 70, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 6 };
+
+const toPoints = (arr, key, max = null) => {
+  if (!arr.length) return '';
+  const values = arr.map((v) => Number(v[key]) || 0);
+  const maxV = max || Math.max(...values, 1);
+  return values
+    .map((v, i) => `${(i / Math.max(values.length - 1, 1)) * 230 + 5},${65 - (v / maxV) * 55}`)
+    .join(' ');
+};
+
 @observer
 class Lobby extends Component {
   state = {
@@ -12,6 +23,8 @@ class Lobby extends Component {
     farmName: '',
     tankCount: 0,
     tanks: '',
+    selectedTank: null,
+    selectedMetric: 'temp',
     journal: { tank: '', temp: '', ph: '', do: '', salinity: '', ammonia: '', turbidity: '', note: '' },
     journals: [],
   };
@@ -26,6 +39,7 @@ class Lobby extends Component {
         farmName: user.farmName || '',
         tankCount: user.tankCount || 0,
         tanks: (user.tanks || []).join(', '),
+        selectedTank: (user.tanks || [])[0] || null,
         journals: listJournalsByUser(user.id),
       }));
     }, 300);
@@ -41,6 +55,7 @@ class Lobby extends Component {
       tanks: tanks.split(',').map((v) => v.trim()).filter(Boolean),
     });
     this.props.setUser(next);
+    this.setState({ selectedTank: next.tanks[0] || null });
   };
 
   onJournal = () => {
@@ -54,6 +69,9 @@ class Lobby extends Component {
 
   render() {
     const { rooms } = this.props;
+    const tankList = this.state.tanks.split(',').map((v) => v.trim()).filter(Boolean);
+    const tankLogs = this.state.journals.filter((j) => j.tank === this.state.selectedTank);
+    const latest = tankLogs[0] || {};
 
     return (
       <div className='chat-lobby'>
@@ -74,6 +92,32 @@ class Lobby extends Component {
           />
         ))}
         <button onClick={this.onJournal}>일지 저장</button>
+
+        <h3>수조 상세 (수조 클릭)</h3>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {tankList.map((t) => (
+            <button key={t} onClick={() => this.setState({ selectedTank: t })}>
+              {t} {this.state.selectedTank === t ? '✓' : ''}
+            </button>
+          ))}
+        </div>
+        {this.state.selectedTank && (
+          <div>
+            <div>선택 수조: <b>{this.state.selectedTank}</b></div>
+            <div>최근 측정값: T {latest.temp || '-'} / pH {latest.ph || '-'} / DO {latest.do || '-'}</div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+              {['temp', 'ph', 'do', 'salinity', 'ammonia', 'turbidity'].map((m) => (
+                <button key={m} onClick={() => this.setState({ selectedMetric: m })}>{m}</button>
+              ))}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <svg viewBox='0 0 240 70' style={chartStyle}>
+                <polyline fill='none' stroke='#2563eb' strokeWidth='2' points={toPoints(tankLogs.slice(0, 12).reverse(), this.state.selectedMetric)} />
+              </svg>
+            </div>
+          </div>
+        )}
+
         <ul>
           {this.state.journals.slice(0, 5).map((j) => (
             <li key={j.id}>{j.createdAt} / {j.tank} / T:{j.temp} pH:{j.ph} DO:{j.do}</li>
